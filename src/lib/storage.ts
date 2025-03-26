@@ -17,58 +17,123 @@ interface StoredPitch {
 
 // Storage key for localStorage
 const STORAGE_KEY = 'pitchhouse_videos';
-const BLOB_STORAGE_PREFIX = 'pitchhouse_blob_';
+const DB_NAME = 'pitchhouse_db';
+const BLOB_STORE = 'video_blobs';
+const DB_VERSION = 1;
 
-// Convert Blob to Base64 string
-const blobToBase64 = (blob: Blob): Promise<string> => {
+// Initialize the IndexedDB
+const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('Failed to convert blob to base64'));
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = (event) => {
+      console.error("IndexedDB error:", event);
+      reject("Could not open IndexedDB");
+    };
+    
+    request.onsuccess = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      resolve(db);
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(BLOB_STORE)) {
+        db.createObjectStore(BLOB_STORE, { keyPath: 'id' });
       }
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
   });
 };
 
-// Convert Base64 string to Blob
-const base64ToBlob = (base64: string): Blob => {
-  const parts = base64.split(';base64,');
-  const contentType = parts[0].split(':')[1];
-  const byteString = atob(parts[1]);
-  const ab = new ArrayBuffer(byteString.length);
-  const ia = new Uint8Array(ab);
-  
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i);
+// Save video blob to IndexedDB
+const saveVideoBlob = async (id: string, blob: Blob): Promise<void> => {
+  try {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([BLOB_STORE], 'readwrite');
+      const store = transaction.objectStore(BLOB_STORE);
+      
+      const request = store.put({ id, blob });
+      
+      request.onsuccess = () => resolve();
+      request.onerror = (e) => {
+        console.error("Error saving blob to IndexedDB:", e);
+        reject(e);
+      };
+    });
+  } catch (error) {
+    console.error("Failed to initialize IndexedDB:", error);
+    throw error;
   }
-  
-  return new Blob([ab], { type: contentType });
 };
 
-// Save video to localStorage
+// Get video blob from IndexedDB
+const getVideoBlob = async (id: string): Promise<Blob | null> => {
+  try {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([BLOB_STORE], 'readonly');
+      const store = transaction.objectStore(BLOB_STORE);
+      
+      const request = store.get(id);
+      
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result.blob);
+        } else {
+          resolve(null);
+        }
+      };
+      
+      request.onerror = (e) => {
+        console.error("Error retrieving blob from IndexedDB:", e);
+        reject(e);
+      };
+    });
+  } catch (error) {
+    console.error("Failed to initialize IndexedDB:", error);
+    return null;
+  }
+};
+
+// Delete video blob from IndexedDB
+const deleteVideoBlob = async (id: string): Promise<void> => {
+  try {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([BLOB_STORE], 'readwrite');
+      const store = transaction.objectStore(BLOB_STORE);
+      
+      const request = store.delete(id);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = (e) => {
+        console.error("Error deleting blob from IndexedDB:", e);
+        reject(e);
+      };
+    });
+  } catch (error) {
+    console.error("Failed to initialize IndexedDB:", error);
+    throw error;
+  }
+};
+
+// Save video to IndexedDB and metadata to localStorage
 export const saveVideoToLocalStorage = async (video: PitchVideo): Promise<void> => {
   try {
-    // Convert blob to base64
-    const blobBase64 = await blobToBase64(video.blob);
+    // Store video blob in IndexedDB
+    await saveVideoBlob(video.id, video.blob);
     
-    // Store the blob separately to avoid localStorage size limits
-    localStorage.setItem(`${BLOB_STORAGE_PREFIX}${video.id}`, blobBase64);
-    
-    // Get existing videos
+    // Get existing videos metadata
     const existingVideosJson = localStorage.getItem(STORAGE_KEY);
     const existingVideos: StoredPitch[] = existingVideosJson ? JSON.parse(existingVideosJson) : [];
     
-    // Add new video without the blob (which is stored separately)
+    // Add new video metadata (without the blob)
     const storedPitch: StoredPitch = {
       id: video.id,
       title: video.title,
       description: video.description,
-      blobUrl: `${BLOB_STORAGE_PREFIX}${video.id}`,
+      blobUrl: video.id, // Just store the ID, we'll fetch from IndexedDB
       date: video.date
     };
     
@@ -80,7 +145,7 @@ export const saveVideoToLocalStorage = async (video: PitchVideo): Promise<void> 
     
     return Promise.resolve();
   } catch (error) {
-    console.error('Error saving video to localStorage:', error);
+    console.error('Error saving video:', error);
     return Promise.reject(error);
   }
 };
@@ -97,24 +162,24 @@ export const getVideo = (id: string): StoredPitch | null => {
   return videos.find(video => video.id === id) || null;
 };
 
-// Get video blob from localStorage
-export const getVideoBlob = (id: string): Blob | null => {
-  const blobBase64 = localStorage.getItem(`${BLOB_STORAGE_PREFIX}${id}`);
-  return blobBase64 ? base64ToBlob(blobBase64) : null;
-};
-
-// Create object URL for video
-export const getVideoBlobUrl = (id: string): string | null => {
-  const blob = getVideoBlob(id);
+// Get video blob URL
+export const getVideoBlobUrl = async (id: string): Promise<string | null> => {
+  const blob = await getVideoBlob(id);
   return blob ? URL.createObjectURL(blob) : null;
 };
 
-// Delete video from localStorage
-export const deleteVideo = (id: string): void => {
-  // Remove the blob
-  localStorage.removeItem(`${BLOB_STORAGE_PREFIX}${id}`);
+// Synchronous version for compatibility with existing code
+export const getVideoBlobUrlSync = (id: string): string | null => {
+  // Return a placeholder that will be replaced when the real URL is available
+  return `pending-${id}`;
+};
+
+// Delete video
+export const deleteVideo = async (id: string): Promise<void> => {
+  // Remove blob from IndexedDB
+  await deleteVideoBlob(id);
   
-  // Remove from the list
+  // Remove metadata from localStorage
   const videos = getAllVideos();
   const updatedVideos = videos.filter(video => video.id !== id);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedVideos));
@@ -125,8 +190,6 @@ export const loadSampleVideosIfEmpty = (): void => {
   const videos = getAllVideos();
   
   if (videos.length === 0) {
-    // This is just a placeholder - in a real app, you might load demo content
-    // But we can't really preload video blobs easily
     console.log('No videos found - would load sample videos in a real app');
   }
 };

@@ -1,5 +1,5 @@
 
-import { getAllVideos, getVideoBlobUrl } from './storage';
+import { getAllVideos, getVideoBlobUrlSync } from './storage';
 
 export interface Pitch {
   id: string;
@@ -30,7 +30,7 @@ export const getAllPitches = (): Pitch[] => {
   const storedVideos = getAllVideos();
   
   return storedVideos.map(video => {
-    const videoUrl = getVideoBlobUrl(video.id) || '';
+    const videoUrl = getVideoBlobUrlSync(video.id) || '';
     
     // Create a Pitch object from the stored video
     return {
@@ -48,6 +48,25 @@ export const getAllPitches = (): Pitch[] => {
       featured: Math.random() > 0.8 // Random featured status (20% chance)
     };
   });
+};
+
+// Load actual video URLs asynchronously
+export const loadActualVideoUrls = async (pitches: Pitch[]): Promise<Pitch[]> => {
+  const updatedPitches = [...pitches];
+  
+  for (let i = 0; i < updatedPitches.length; i++) {
+    const pitch = updatedPitches[i];
+    if (pitch.videoUrl.startsWith('pending-')) {
+      const realUrl = await import('./storage').then(
+        module => module.getVideoBlobUrl(pitch.id)
+      );
+      if (realUrl) {
+        updatedPitches[i] = { ...pitch, videoUrl: realUrl };
+      }
+    }
+  }
+  
+  return updatedPitches;
 };
 
 // Get a specific pitch by ID

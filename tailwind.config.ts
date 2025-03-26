@@ -64,7 +64,8 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				neon: {
-					blue: '#00f2ff',
+					blue: '#2F80ED',
+					cyan: '#00f2ff',
 					purple: '#9200ff',
 					pink: '#ff00c8',
 				}
@@ -121,15 +122,15 @@ export default {
 				},
 				'glow': {
 					'0%, 100%': { 
-						'box-shadow': '0 0 5px 2px rgba(0, 242, 255, 0.3), 0 0 10px rgba(0, 242, 255, 0.2)' 
+						'box-shadow': '0 0 5px 2px rgba(47, 128, 237, 0.3), 0 0 10px rgba(47, 128, 237, 0.2)' 
 					},
 					'50%': { 
-						'box-shadow': '0 0 20px 5px rgba(0, 242, 255, 0.5), 0 0 30px rgba(0, 242, 255, 0.3)' 
+						'box-shadow': '0 0 20px 5px rgba(47, 128, 237, 0.5), 0 0 30px rgba(47, 128, 237, 0.3)' 
 					}
 				},
 				'neon-pulse': {
-					'0%, 100%': { 'text-shadow': '0 0 7px #00f2ff, 0 0 10px #00f2ff, 0 0 21px #00f2ff' },
-					'50%': { 'text-shadow': '0 0 10px #00f2ff, 0 0 20px #00f2ff, 0 0 30px #00f2ff' }
+					'0%, 100%': { 'text-shadow': '0 0 7px #2F80ED, 0 0 10px #2F80ED, 0 0 21px #2F80ED' },
+					'50%': { 'text-shadow': '0 0 10px #2F80ED, 0 0 20px #2F80ED, 0 0 30px #2F80ED' }
 				}
 			},
 			animation: {
